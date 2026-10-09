@@ -1,0 +1,1431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Echo.io</title>
+<style>
+  :root {
+    --bg: #041025;
+    --panel-bg: rgba(8, 22, 48, 0.85);
+    --panel-border: rgba(110, 238, 255, 0.2);
+    --accent: #6ef;
+    --accent-hover: #9ff;
+    --text: #ffffff;
+    --text-dim: rgba(255, 255, 255, 0.65);
+    --bot-color: #ff6b6b;
+  }
+  
+  * { box-sizing: border-box; user-select: none; }
+  input, select { user-select: text; }
+  html, body {
+    height: 100%; margin: 0; padding: 0;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); overflow: hidden;
+  }
+
+  /* Full Screen Canvas */
+  #gameContainer {
+    position: absolute; inset: 0; width: 100vw; height: 100vh; overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  /* In-Game Minimal HUD */
+  .ingame-hud {
+    position: absolute; top: 16px; left: 16px; right: 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    pointer-events: none; z-index: 10;
+  }
+  .hud-stat {
+    background: var(--panel-bg); backdrop-filter: blur(8px);
+    border: 1px solid var(--panel-border); border-radius: 20px;
+    padding: 6px 16px; font-weight: 700; font-size: 14px;
+    display: flex; gap: 8px; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .hud-btn {
+    pointer-events: auto; background: var(--panel-bg); backdrop-filter: blur(8px);
+    border: 1px solid var(--panel-border); color: #fff; padding: 6px 16px;
+    border-radius: 20px; cursor: pointer; font-weight: 700; font-size: 13px;
+    transition: all 0.2s ease;
+  }
+  .hud-btn:hover { background: rgba(110,238,255,0.2); }
+
+  /* Navigation Tabs */
+  .nav-tabs {
+    display: flex; position: relative; border-bottom: 2px solid rgba(255,255,255,0.1);
+    margin-top: 10px; margin-bottom: 12px;
+  }
+  .tab-btn {
+    flex: 1; background: none; border: none; color: var(--text-dim);
+    padding: 8px 4px; font-weight: 600; font-size: 13px; cursor: pointer; text-align: center;
+    transition: color 0.2s ease;
+  }
+  .tab-btn.active { color: var(--accent); }
+  .tab-indicator {
+    position: absolute; bottom: -2px; left: 0; height: 2px;
+    background: var(--accent); transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  .tab-content { display: none; flex-direction: column; gap: 10px; height: 220px; overflow-y: auto; text-align: left; }
+  .tab-content.active { display: flex; }
+
+  /* Buttons & Inputs */
+  button.action-btn {
+    background: var(--accent); color: #022; border: 0; padding: 12px 20px;
+    border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: 800;
+    transition: all 0.2s ease; box-shadow: 0 0 12px rgba(110,238,255,0.25);
+  }
+  button.action-btn:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 0 18px rgba(110,238,255,0.4); }
+
+  .name-input-container {
+    margin-top: 12px; margin-bottom: 8px; text-align: left;
+  }
+  .name-input-label {
+    font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; display: block;
+  }
+  input.name-input {
+    width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--panel-border);
+    color: #fff; padding: 10px 14px; border-radius: 8px; outline: none; font-size: 14px;
+    font-weight: 600; text-align: center; transition: all 0.2s ease;
+  }
+  input.name-input:focus {
+    border-color: var(--accent); background: rgba(255,255,255,0.1); box-shadow: 0 0 10px rgba(110,238,255,0.2);
+  }
+
+  /* Grid of Skins */
+  .skins-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .skin-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px; padding: 8px; text-align: center; cursor: pointer;
+    transition: all 0.2s ease; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .skin-card:hover { border-color: rgba(110,238,255,0.5); background: rgba(255,255,255,0.08); }
+  .skin-card.active { border-color: var(--accent); background: rgba(110,238,255,0.12); }
+  .skin-card.locked { opacity: 0.5; cursor: not-allowed; }
+  .skin-preview { width: 24px; height: 24px; border-radius: 50%; display: inline-block; }
+  .skin-name { font-size: 11px; font-weight: 600; }
+  .skin-req { font-size: 9px; color: var(--text-dim); }
+
+  /* Daily Challenges Card */
+  .challenge-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .challenge-title { font-size: 12px; font-weight: 700; color: #fff; }
+  .challenge-desc { font-size: 11px; color: var(--text-dim); }
+  .challenge-reward { font-size: 11px; color: #ffd700; font-weight: 600; }
+  .progress-bar-bg { width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .progress-bar-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s ease; }
+
+  /* Stats Row */
+  .stat-item {
+    display: flex; justify-content: space-between; padding: 8px 12px;
+    background: rgba(255,255,255,0.04); border-radius: 6px; font-size: 13px;
+  }
+
+  /* Leaderboard Table */
+  .lb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .lb-table th { text-align: left; padding: 6px; color: var(--text-dim); border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .lb-table td { padding: 6px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+
+  /* Overlays / Modals */
+  .overlay {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(2, 8, 20, 0.85); backdrop-filter: blur(10px);
+  }
+  .overlay.show { display: flex; }
+  .box {
+    background: #081226; border: 1px solid var(--panel-border);
+    padding: 24px; border-radius: 16px; text-align: center; max-width: 90vw; width: 440px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  }
+  .box h2 { margin: 0 0 6px; font-size: 28px; color: var(--accent); }
+  .box .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+
+  .mode-btn {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15);
+    color: #fff; padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;
+  }
+  .mode-btn.active { background: var(--accent); color: #022; border-color: var(--accent); }
+
+  .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 13px; }
+  select.setting-select, input.setting-input {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+    color: #fff; padding: 4px 8px; border-radius: 6px; outline: none; font-size: 13px;
+  }
+  input.setting-input { text-align: right; width: 140px; }
+  input.setting-input:focus { border-color: var(--accent); }
+
+  #perkBanner {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(255,215,0,0.9); color: #000; font-weight: 800; font-size: 14px;
+    padding: 8px 20px; border-radius: 20px; z-index: 30; display: none;
+    box-shadow: 0 0 20px rgba(255,215,0,0.5); pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+  <!-- Perk Notification -->
+  <div id="perkBanner">PERK ACTIVE</div>
+
+  <!-- In-Game Minimal HUD -->
+  <div class="ingame-hud">
+    <div class="hud-stat">SCORE: <span id="hudScore" style="color:var(--accent)">0</span></div>
+    <div class="hud-stat">RADIUS: <span id="hudRadius" style="color:var(--accent)">12</span></div>
+    <button class="hud-btn" id="hudPauseBtn">⏸ Pause</button>
+  </div>
+
+  <!-- Full Screen Canvas -->
+  <div id="gameContainer">
+    <canvas id="game"></canvas>
+  </div>
+
+  <!-- OVERLAY: Main Menu Screen with Integrated Tabs -->
+  <div class="overlay show" id="startScreen">
+    <div class="box">
+      <h2>Echo.io</h2>
+      <div style="font-size:12px; color:var(--text-dim);">Fire directional echoes, collect orbs, and dominate the arena!</div>
+
+      <!-- Player Name Choice Input -->
+      <div class="name-input-container">
+        <label for="usernameInput" class="name-input-label">Player Name</label>
+        <input type="text" id="usernameInput" class="name-input" placeholder="Enter Name..." maxlength="14">
+      </div>
+
+      <!-- Navigation Tabs Inside Menu -->
+      <div class="nav-tabs" id="navTabs">
+        <button class="tab-btn active" data-tab="tabSkins">Skins</button>
+        <button class="tab-btn" data-tab="tabDaily">Daily Quest</button>
+        <button class="tab-btn" data-tab="tabLeaderboard">Ranks</button>
+        <button class="tab-btn" data-tab="tabStats">Stats</button>
+        <div class="tab-indicator" id="tabIndicator"></div>
+      </div>
+
+      <!-- TAB: Skins -->
+      <div class="tab-content active" id="tabSkins">
+        <div class="skins-grid" id="skinsGrid"></div>
+      </div>
+
+      <!-- TAB: Daily Challenges -->
+      <div class="tab-content" id="tabDaily">
+        <div id="dailyChallengesList" style="display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
+
+      <!-- TAB: Leaderboard -->
+      <div class="tab-content" id="tabLeaderboard">
+        <table class="lb-table">
+          <thead>
+            <tr><th>#</th><th>Player</th><th>Score</th></tr>
+          </thead>
+          <tbody id="leaderboardBody"></tbody>
+        </table>
+      </div>
+
+      <!-- TAB: Stats -->
+      <div class="tab-content" id="tabStats">
+        <div class="stat-item"><div>Best Score</div><div style="font-weight:700;color:var(--accent)" id="best">0</div></div>
+        <div class="stat-item"><div>Selected Skin</div><div style="font-weight:700;color:var(--accent)" id="statSkinName">Cyan Blue</div></div>
+        <div class="stat-item"><div>Controls</div><div style="color:var(--text-dim)">WASD / Arrows / Mouse</div></div>
+      </div>
+
+      <!-- Mode Selection & Start Button -->
+      <div style="margin-top:10px; margin-bottom:12px;">
+        <div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px;">
+          <button class="mode-btn active" id="modeBots">AI Bots (Solo)</button>
+          <button class="mode-btn" id="modeMulti">Multiplayer (WS)</button>
+        </div>
+        <div id="serverRow" style="display:none; margin-bottom:10px;">
+          <input type="text" id="serverInput" class="name-input" placeholder="Server (blank = this site, or ws://localhost:3000)" style="font-size:12px;">
+          <div id="netStatus" style="font-size:11px; color:var(--text-dim); margin-top:4px; min-height:14px;"></div>
+        </div>
+        <button id="startGameBtn" class="action-btn" style="width:100%;">🎮 PLAY NOW</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERLAY: Death Screen -->
+  <div class="overlay" id="deathScreen">
+    <div class="box">
+      <h2 style="color:#ff6b6b">Destroyed!</h2>
+      <div id="deathText" style="font-size:14px; color:var(--text-dim);">You were eliminated by an echo.</div>
+      <div style="margin: 16px 0;" class="stat-item"><div>Final Score</div><div style="font-weight:700;color:var(--accent)" id="finalScore">0</div></div>
+      <div class="row">
+        <button class="action-btn" id="respawnBtn">Respawn Now</button>
+        <button class="action-btn" id="menuBtn" style="background:rgba(255,255,255,0.1); color:#fff;">Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERLAY: Pause / Settings Screen -->
+  <div class="overlay" id="pauseScreen">
+    <div class="box">
+      <h2>Game Settings</h2>
+      <div style="margin: 20px 0; text-align: left;">
+        <div class="setting-row">
+          <label for="settingsNameInput">Player Name</label>
+          <input type="text" id="settingsNameInput" class="setting-input" maxlength="14" placeholder="EchoRunner">
+        </div>
+        <div class="setting-row">
+          <label for="volumeSlider">Sound Volume</label>
+          <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.5">
+        </div>
+        <div class="setting-row">
+          <label for="diffSelect">Bot Difficulty</label>
+          <select id="diffSelect" class="setting-select">
+            <option value="easy">Easy (0.25s Echoes)</option>
+            <option value="regular" selected>Regular (1.0s Echoes)</option>
+            <option value="hard">Hard (2.5s Echoes)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <button class="action-btn" id="resumeBtn">Resume Game</button>
+        <button class="action-btn" id="quitBtn" style="background:rgba(255,255,255,0.1); color:#fff;">Quit to Menu</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const canvas = $('game'), ctx = canvas.getContext('2d');
+  const TAU = Math.PI * 2;
+
+  // ---------- Web Audio Synthesizer ----------
+  let audioCtx = null;
+  function getAudio() {
+    if (!audioCtx) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) audioCtx = new AudioContext();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function playSonarPing(freq = 600, duration = 0.15) {
+    const ac = getAudio();
+    if (!ac || soundVolume <= 0) return;
+    try {
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ac.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.8, ac.currentTime + duration);
+      
+      gain.gain.setValueAtTime(soundVolume * 0.3, ac.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
+      
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start();
+      osc.stop(ac.currentTime + duration);
+    } catch(e){}
+  }
+
+  function playExplosionSound() {
+    const ac = getAudio();
+    if (!ac || soundVolume <= 0) return;
+    try {
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(120, ac.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(20, ac.currentTime + 0.3);
+      
+      gain.gain.setValueAtTime(soundVolume * 0.5, ac.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + 0.3);
+      
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start();
+      osc.stop(ac.currentTime + 0.3);
+    } catch(e){}
+  }
+
+  // ---------- Skins & Unlock Data ----------
+  const SKINS = [
+    { id: 'cyan', name: 'Cyan Blue', color: '110,200,255', hex: '#6ef', req: 'Default', unlocked: true },
+    { id: 'neon', name: 'Cyber Neon', color: '57,255,20', hex: '#39ff14', req: 'Score 50+', minScore: 50 },
+    { id: 'red', name: 'Crimson', color: '255,80,80', hex: '#ff5050', req: 'Score 150+', minScore: 150 },
+    { id: 'orange', name: 'Amber', color: '255,165,0', hex: '#ffa500', req: 'Score 300+', minScore: 300 },
+    { id: 'yellow', name: 'Lemon', color: '255,235,59', hex: '#ffeb3b', req: 'Score 500+', minScore: 500 },
+    { id: 'green', name: 'Emerald', color: '76,175,80', hex: '#4caf50', req: 'Score 800+', minScore: 800 },
+    { id: 'purple', name: 'Void Purple', color: '138,43,226', hex: '#8a2be2', req: 'Score 1200+', minScore: 1200 },
+    { id: 'pink', name: 'Hot Pink', color: '233,30,99', hex: '#e91e63', req: 'Score 1800+', minScore: 1800 },
+    { id: 'silver', name: 'Silver', color: '200,210,225', hex: '#c8d2e1', req: 'Score 2500+', minScore: 2500 },
+    { id: 'gold', name: 'Gold', color: '255,215,0', hex: '#ffd700', req: 'Score 3500+', minScore: 3500 },
+    { id: 'cosmic', name: 'Starlight', color: 'cosmic', hex: 'linear-gradient(45deg, #00c6ff, #0072ff)', req: 'Score 5000+', minScore: 5000 },
+    { id: 'rainbow', name: 'Rainbow', color: 'rainbow', hex: 'linear-gradient(45deg, red, yellow, green, cyan, blue, magenta)', req: 'Score 7000+', minScore: 7000 },
+    { id: 'solar', name: 'Solar Flare', color: 'solar', hex: 'linear-gradient(45deg, #f857a6, #ff5858)', req: 'Score 9000+', minScore: 9000 },
+    { id: 'sunset', name: 'Sunset', color: 'sunset', hex: 'linear-gradient(45deg, #ff7e5f, #feb47b)', req: 'Score 12000+', minScore: 12000 },
+    { id: 'glitch', name: 'Glitch Core', color: 'glitch', hex: 'linear-gradient(45deg, #000, #00ffcc, #ff0055)', req: 'Score 15000+', minScore: 15000 },
+    { id: 'ocean', name: 'Deep Ocean', color: 'ocean', hex: 'linear-gradient(45deg, #2b5876, #4e4376)', req: 'Score 20000+', minScore: 20000 },
+    { id: 'plasma', name: 'Plasma Arc', color: 'plasma', hex: 'linear-gradient(45deg, #833ab4, #fd1d1d, #fcb045)', req: 'Score 25000+', minScore: 25000 },
+    { id: 'darkmatter', name: 'Dark Matter', color: 'darkmatter', hex: 'linear-gradient(45deg, #111, #434343, #00d2ff)', req: 'Score 35000+', minScore: 35000 },
+
+    { id: 'aurora', name: 'Aurora Veil', color: 'aurora', hex: 'linear-gradient(45deg, #00f5a0, #00d9f5, #7b61ff)', req: 'Complete 1 Daily Challenge', dailyCompletions: 1 },
+    { id: 'moonlit', name: 'Moonlit Indigo', color: 'moonlit', hex: 'linear-gradient(45deg, #182848, #4b6cb7)', req: 'Complete 3 Daily Challenges', dailyCompletions: 3 },
+    { id: 'cherryice', name: 'Cherry Ice', color: 'cherryice', hex: 'linear-gradient(45deg, #ff0844, #ffb199)', req: 'Complete 5 Daily Challenges', dailyCompletions: 5 },
+    { id: 'emeraldfire', name: 'Emerald Fire', color: 'emeraldfire', hex: 'linear-gradient(45deg, #00b09b, #96c93d, #f9d423)', req: 'Complete 10 Daily Challenges', dailyCompletions: 10 },
+
+    { id: 'streak3', name: 'Spark Streak', color: 'streak3', hex: 'linear-gradient(45deg, #ff9a9e, #fad0c4)', req: '3 Day Streak', streak: 3 },
+    { id: 'streak5', name: 'Solar Mint', color: 'streak5', hex: 'linear-gradient(45deg, #00c9a7, #92fe9d)', req: '5 Day Streak', streak: 5 },
+    { id: 'streak7', name: 'Electric Violet', color: 'streak7', hex: 'linear-gradient(45deg, #8f00ff, #00c6ff)', req: '7 Day Streak', streak: 7 },
+    { id: 'streak10', name: 'Inferno Pulse', color: 'streak10', hex: 'linear-gradient(45deg, #ff512f, #dd2476)', req: '10 Day Streak', streak: 10 },
+    { id: 'streak30', name: 'Frozen Flame', color: 'streak30', hex: 'linear-gradient(45deg, #00c6ff, #f0f2f0)', req: '30 Day Streak', streak: 30 },
+    { id: 'streak50', name: 'Royal Nebula', color: 'streak50', hex: 'linear-gradient(45deg, #141e30, #6a11cb, #2575fc)', req: '50 Day Streak', streak: 50 },
+    { id: 'streak100', name: 'Prismatic Void', color: 'streak100', hex: 'linear-gradient(45deg, #ff00cc, #3333ff, #00ffff)', req: '100 Day Streak', streak: 100 },
+    { id: 'streak365', name: 'Celestial Gold', color: 'streak365', hex: 'linear-gradient(45deg, #f7971e, #ffd200, #fff7ad)', req: '365 Day Streak', streak: 365 },
+    { id: 'streak500', name: 'Quantum Prism', color: 'streak500', hex: 'linear-gradient(45deg, #00f2fe, #4facfe, #a18cd1, #fbc2eb)', req: '500 Day Streak', streak: 500 },
+    { id: 'streak1000', name: 'Eternal Singularity', color: 'streak1000', hex: 'linear-gradient(45deg, #000000, #6ef, #ffffff, #ff00ff, #000000)', req: '1,000 Day Streak', streak: 1000 }
+  ];
+
+  let selectedSkin = SKINS[0];
+  let playerName = localStorage.getItem('echoPlayerName') || 'EchoRunner';
+  $('usernameInput').value = playerName;
+  $('settingsNameInput').value = playerName;
+
+  // FIX: the box you are typing in is never rewritten, so spaces and clearing the field work
+  function updatePlayerName(raw, source) {
+    playerName = raw.trim() || 'EchoRunner';
+    if (source !== 'start') $('usernameInput').value = raw;
+    if (source !== 'settings') $('settingsNameInput').value = raw;
+    try { localStorage.setItem('echoPlayerName', playerName); } catch(e){}
+    const p = human();
+    if (p) p.name = playerName;
+  }
+
+  // ---------- Game Configuration & State ----------
+  const PLAYER_RADIUS = 12, MAX_RADIUS = 90;
+  const ECHO_RADIUS = 5, ECHO_SPEED = 140;
+  const BOT_FIRE_MS = 1800;
+  const BOT_COUNT = 5, BOT_SPEED = 45, BOT_RESPAWN_MS = 2500;
+  const ORB_COUNT = 20, ORB_SCORE = 10, KILL_SCORE = 75;
+  const BOT_RGB = '255,107,107';
+  const ARENA_W = 1400, ARENA_H = 800; // the shared online arena (same for every player)
+
+  let soundVolume = 0.5;
+  let botDifficulty = 'regular'; // easy, regular, hard
+  let gameMode = 'bots'; // 'bots' or 'multi'
+
+  // Growth & Fire Rate Adjustments
+  function getOrbGrowthRate() {
+    if (botDifficulty === 'easy') return 0.2;     // Very slow growth on Easy
+    if (botDifficulty === 'regular') return 0.4;  // Moderate slow growth on Regular
+    return 1.2;                                    // Standard growth on Hard
+  }
+
+  function getKillGrowthMult() {
+    if (botDifficulty === 'easy') return 0.08;
+    if (botDifficulty === 'regular') return 0.15;
+    return 0.4;
+  }
+
+  function getPlayerFireInterval() {
+    if (botDifficulty === 'easy') return 450;      // 2x Faster fire rate on Easy (450ms)
+    if (botDifficulty === 'hard') return 1400;     // Slower fire rate / longer cooldown on Hard (1400ms)
+    return 900;                                   // Normal fire rate on Regular (900ms)
+  }
+
+  // view.w/h = the arena size. Solo: the whole window. Online: the fixed shared arena, scaled to fit the window.
+  const view = { w: 0, h: 0, dpr: 1, winW: 0, winH: 0, s: 1, ox: 0, oy: 0 };
+  const state = {
+    players: [], echoes: [], orbs: [], particles: [],
+    keys: {}, mouse: { x: 0, y: 0 },
+    time: 0, score: 0, best: 0, lifetimeScore: 0,
+    screenShake: 0
+  };
+  const net = { active: false, ws: null, id: 0, map: new Map(), lastScore: 0, lastAlive: true, killer: null };
+  const GHOST = { isBot: true, name: '' };
+
+  let running = false, paused = true, last = 0;
+
+  try {
+    state.best = +localStorage.getItem('echoBest') || 0;
+    state.lifetimeScore = +localStorage.getItem('echoLifetimeScore') || 0;
+    state.dailyCompletions = +localStorage.getItem('echoDailyCompletions') || 0;
+  } catch (e) {}
+
+  const rand = (a, b) => Math.random() * (b - a) + a;
+  const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const human = () => state.players[0];
+
+  function getSkinRGB(skin, time) {
+    if (skin.color === 'rainbow') {
+      return hslToRgbStr((time / 10) % 360, 100, 60);
+    } else if (skin.color === 'cosmic') {
+      return interpolateRgb('0,198,255', '0,114,255', (Math.sin(time / 400) + 1) / 2);
+    } else if (skin.color === 'solar') {
+      return interpolateRgb('248,87,166', '255,88,88', (Math.sin(time / 300) + 1) / 2);
+    } else if (skin.color === 'sunset') {
+      return interpolateRgb('255,126,95', '254,180,123', (Math.sin(time / 500) + 1) / 2);
+    } else if (skin.color === 'glitch') {
+      return (Math.floor(time / 80) % 2 === 0) ? '0,255,204' : '255,0,85';
+    } else if (skin.color === 'ocean') {
+      return interpolateRgb('43,88,118', '78,67,118', (Math.cos(time / 600) + 1) / 2);
+    } else if (skin.color === 'plasma') {
+      return interpolateRgb('131,58,180', '253,29,29', (Math.sin(time / 350) + 1) / 2);
+    } else if (skin.color === 'darkmatter') {
+      return interpolateRgb('30,30,40', '0,210,255', (Math.sin(time / 800) + 1) / 2);
+    } else if (skin.color === 'aurora') {
+      return hslToRgbStr((time / 18) % 360, 100, 60);
+    } else if (skin.color === 'moonlit') {
+      return interpolateRgb('24,40,72', '75,108,183', (Math.sin(time / 700) + 1) / 2);
+    } else if (skin.color === 'cherryice') {
+      return interpolateRgb('255,8,68', '255,177,153', (Math.sin(time / 400) + 1) / 2);
+    } else if (skin.color === 'emeraldfire') {
+      return interpolateRgb('0,176,155', '150,201,61', (Math.sin(time / 500) + 1) / 2);
+    } else if (skin.color === 'streak3') {
+      return interpolateRgb('255,154,158', '250,208,196', (Math.sin(time / 450) + 1) / 2);
+    } else if (skin.color === 'streak5') {
+      return interpolateRgb('0,201,167', '146,254,157', (Math.sin(time / 500) + 1) / 2);
+    } else if (skin.color === 'streak7') {
+      return interpolateRgb('143,0,255', '0,198,255', (Math.sin(time / 450) + 1) / 2);
+    } else if (skin.color === 'streak10') {
+      return interpolateRgb('255,81,47', '221,36,118', (Math.sin(time / 350) + 1) / 2);
+    } else if (skin.color === 'streak30') {
+      return interpolateRgb('0,198,255', '240,242,240', (Math.sin(time / 650) + 1) / 2);
+    } else if (skin.color === 'streak50') {
+      return interpolateRgb('106,17,203', '37,117,252', (Math.sin(time / 700) + 1) / 2);
+    } else if (skin.color === 'streak100') {
+      return hslToRgbStr((time / 8) % 360, 100, 60);
+    } else if (skin.color === 'streak365') {
+      return interpolateRgb('247,151,30', '255,247,173', (Math.sin(time / 600) + 1) / 2);
+    } else if (skin.color === 'streak500') {
+      return hslToRgbStr((time / 12) % 360, 85, 70);
+    } else if (skin.color === 'streak1000') {
+      return hslToRgbStr((time / 5) % 360, 100, 70);
+    }
+    return skin.color;
+  }
+
+  function hslToRgbStr(h, s, l) {
+    s /= 100; l /= 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return `${Math.round(255 * f(0))},${Math.round(255 * f(8))},${Math.round(255 * f(4))}`;
+  }
+
+  function interpolateRgb(rgb1, rgb2, factor) {
+    const c1 = rgb1.split(',').map(Number);
+    const c2 = rgb2.split(',').map(Number);
+    const r = Math.round(c1[0] + factor * (c2[0] - c1[0]));
+    const g = Math.round(c1[1] + factor * (c2[1] - c1[1]));
+    return `${r},${g},${Math.round(c1[2] + factor * (c2[2] - c1[2]))}`;
+  }
+
+  // ---------- Canvas & Window Resize ----------
+  function applyArena() {
+    if (net.active) {
+      view.w = ARENA_W; view.h = ARENA_H;
+      view.s = Math.min(view.winW / ARENA_W, view.winH / ARENA_H);
+      view.ox = (view.winW - ARENA_W * view.s) / 2;
+      view.oy = (view.winH - ARENA_H * view.s) / 2;
+    } else {
+      view.w = view.winW; view.h = view.winH;
+      view.s = 1; view.ox = 0; view.oy = 0;
+    }
+  }
+
+  function fitCanvas() {
+    view.dpr = Math.max(1, window.devicePixelRatio || 1);
+    view.winW = window.innerWidth;
+    view.winH = window.innerHeight;
+    canvas.width = Math.floor(view.winW * view.dpr);
+    canvas.height = Math.floor(view.winH * view.dpr);
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    applyArena();
+
+    for (const e of state.players) {
+      if (e) {
+        e.x = clamp(e.x, e.radius, Math.max(e.radius, view.w - e.radius));
+        e.y = clamp(e.y, e.radius, Math.max(e.radius, view.h - e.radius));
+      }
+    }
+  }
+
+  // ---------- Entity Creation & Spawning ----------
+  function makeEntity(x, y, isBot, name = 'Bot') {
+    return {
+      x, y, vx: 0, vy: 0, radius: PLAYER_RADIUS, isBot, alive: true,
+      angle: rand(0, TAU), pulse: rand(0, TAU), name,
+      lastEchoAt: isBot ? -rand(0, BOT_FIRE_MS) : -1e9,
+      respawnIn: 0, invulnUntil: 0
+    };
+  }
+
+  function randomSpot(minFromPlayer) {
+    const p = human();
+    let x = 0, y = 0;
+    for (let i = 0; i < 30; i++) {
+      x = rand(60, Math.max(61, view.w - 60));
+      y = rand(60, Math.max(61, view.h - 60));
+      if (!p || !p.alive || dist(x, y, p.x, p.y) >= minFromPlayer) break;
+    }
+    return { x, y };
+  }
+
+  function spawnOrb() {
+    state.orbs.push({
+      x: rand(30, view.w - 30), y: rand(30, view.h - 30),
+      r: rand(5, 8), phase: rand(0, TAU)
+    });
+  }
+
+  function createExplosion(x, y, rgb, count = 25) {
+    for (let i = 0; i < count; i++) {
+      const angle = rand(0, TAU);
+      const speed = rand(40, 220);
+      state.particles.push({
+        x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        r: rand(2, 5), life: 1, decay: rand(1.2, 2.5), rgb
+      });
+    }
+  }
+
+  // ---------- Game Setup & Reset (solo vs bots) ----------
+  function initGame() {
+    updatePlayerName($('usernameInput').value, 'start');
+
+    state.players = [makeEntity(view.w / 2, view.h / 2, false, playerName)];
+    
+    // Single-Use Perk Activation Logic
+    const currentTask = getDailyTask();
+    if (dailyState.completed && !dailyState.rewardUsed) {
+      if (currentTask.rewardType === 'radius') {
+        human().radius = PLAYER_RADIUS * 2;
+        triggerPerkBanner("2X STARTING RADIUS ACTIVATED (SINGLE-USE)");
+      } else if (currentTask.rewardType === 'shield') {
+        human().invulnUntil = Date.now() + 12000;
+        triggerPerkBanner("12s SHIELD IMMUNITY ACTIVATED (SINGLE-USE)");
+      }
+      dailyState.rewardUsed = true;
+      saveDailyState();
+      renderDailyChallenges();
+    }
+
+    for (let i = 0; i < BOT_COUNT; i++) {
+      const s = randomSpot(200);
+      state.players.push(makeEntity(s.x, s.y, true, `Bot ${i+1}`));
+    }
+
+    state.echoes = [];
+    state.orbs = [];
+    state.particles = [];
+    while (state.orbs.length < ORB_COUNT) spawnOrb();
+    
+    state.score = 0;
+    state.time = 0;
+    state.mouse.x = view.w / 2; state.mouse.y = view.h / 2;
+    
+    running = true;
+    paused = false;
+  }
+
+  function triggerPerkBanner(msg) {
+    const banner = $('perkBanner');
+    banner.textContent = msg;
+    banner.style.display = 'block';
+    setTimeout(() => { banner.style.display = 'none'; }, 4000);
+  }
+
+  // ---------- Emit Echo Sounds & Direction ----------
+  function emitEcho(owner) {
+    let a;
+    if (owner.isBot) {
+      a = owner.angle;
+    } else {
+      if (Math.hypot(owner.vx, owner.vy) > 10) {
+        a = Math.atan2(owner.vy, owner.vx);
+      } else {
+        const dx = state.mouse.x - owner.x, dy = state.mouse.y - owner.y;
+        a = (dx || dy) ? Math.atan2(dy, dx) : owner.angle;
+      }
+    }
+
+    const off = owner.radius + ECHO_RADIUS + 4;
+    
+    // DYNAMIC DIFFICULTY ECHO FADE LIFETIME
+    let lifetime = 5000;
+    if (owner.isBot) {
+      if (botDifficulty === 'easy') lifetime = 250;       // 0.25 seconds fade
+      else if (botDifficulty === 'regular') lifetime = 1000; // 1.0 second fade
+      else if (botDifficulty === 'hard') lifetime = 2500;   // 2.5 seconds fade
+    }
+
+    state.echoes.push({
+      x: owner.x + Math.cos(a) * off,
+      y: owner.y + Math.sin(a) * off,
+      vx: Math.cos(a) * ECHO_SPEED,
+      vy: Math.sin(a) * ECHO_SPEED,
+      r: ECHO_RADIUS,
+      owner,
+      spawnAt: state.time,
+      lifetime: lifetime
+    });
+
+    if (!owner.isBot) playSonarPing(750, 0.12);
+  }
+
+  function saveProgress() {
+    try {
+      localStorage.setItem('echoBest', state.best);
+      localStorage.setItem('echoLifetimeScore', Math.floor(state.lifetimeScore));
+    } catch (e) {}
+  }
+
+  // Used by solo and online. Online games keep running, so only solo pauses.
+  function killHuman(reason) {
+    if (!net.active) paused = true;
+    playExplosionSound();
+    state.screenShake = 18;
+    const finalScore = Math.floor(state.score);
+    state.best = Math.max(state.best, finalScore);
+    saveProgress();
+    checkSkinUnlocks();
+    postScore(finalScore);
+
+    $('finalScore').textContent = finalScore;
+    $('deathText').textContent = reason || 'You were eliminated by an echo.';
+    $('deathScreen').classList.add('show');
+  }
+
+  // ---------- Game Loop Updates (solo) ----------
+  function updateFx(dt) {
+    if (state.screenShake > 0) state.screenShake = Math.max(0, state.screenShake - dt * 40);
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const pt = state.particles[i];
+      pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+      pt.life -= pt.decay * dt;
+      if (pt.life <= 0) state.particles.splice(i, 1);
+    }
+  }
+
+  function update(dt) {
+    const now = state.time;
+    const p = human();
+    const key = k => !!state.keys[k];
+
+    updateFx(dt);
+
+    if (p && p.alive) {
+      const kx = (key('d') || key('arrowright') ? 1 : 0) - (key('a') || key('arrowleft') ? 1 : 0);
+      const ky = (key('s') || key('arrowdown') ? 1 : 0) - (key('w') || key('arrowup') ? 1 : 0);
+      const maxSpeed = 160 * Math.min(1.5, 1 + (p.radius - PLAYER_RADIUS) / 130);
+      let tx = 0, ty = 0;
+
+      if (kx || ky) {
+        const m = Math.hypot(kx, ky);
+        tx = (kx / m) * maxSpeed; ty = (ky / m) * maxSpeed;
+      } else {
+        const dx = state.mouse.x - p.x, dy = state.mouse.y - p.y, d = Math.hypot(dx, dy);
+        if (d > 10) {
+          const s = Math.min(maxSpeed, d * 3.5);
+          tx = (dx / d) * s; ty = (dy / d) * s;
+        }
+      }
+
+      const f = Math.min(1, 8 * dt);
+      p.vx += (tx - p.vx) * f; p.vy += (ty - p.vy) * f;
+      p.x = clamp(p.x + p.vx * dt, p.radius, view.w - p.radius);
+      p.y = clamp(p.y + p.vy * dt, p.radius, view.h - p.radius);
+      p.angle = Math.atan2(p.vy, p.vx) || p.angle;
+    }
+
+    for (const b of state.players) {
+      if (!b.isBot) continue;
+      if (!b.alive) {
+        b.respawnIn -= dt * 1000;
+        if (b.respawnIn <= 0) {
+          const s = randomSpot(180);
+          Object.assign(b, {
+            x: s.x, y: s.y, alive: true, radius: PLAYER_RADIUS,
+            lastEchoAt: now - rand(0, BOT_FIRE_MS)
+          });
+        }
+        continue;
+      }
+
+      const botSpeedMult = botDifficulty === 'easy' ? 0.75 : (botDifficulty === 'hard' ? 1.3 : 1.0);
+      if (Math.random() < dt * 1.5) b.angle = rand(0, TAU);
+      b.x += Math.cos(b.angle) * BOT_SPEED * botSpeedMult * dt;
+      b.y += Math.sin(b.angle) * BOT_SPEED * botSpeedMult * dt;
+
+      if (b.x < b.radius || b.x > view.w - b.radius) b.angle = Math.PI - b.angle;
+      if (b.y < b.radius || b.y > view.h - b.radius) b.angle = -b.angle;
+      b.x = clamp(b.x, b.radius, view.w - b.radius);
+      b.y = clamp(b.y, b.radius, view.h - b.radius);
+    }
+
+    for (const e of state.players) {
+      const fireInterval = e.isBot ? BOT_FIRE_MS : getPlayerFireInterval();
+      if (e.alive && now - e.lastEchoAt >= fireInterval) {
+        emitEcho(e);
+        e.lastEchoAt = now;
+      }
+    }
+
+    for (let i = state.echoes.length - 1; i >= 0; i--) {
+      const e = state.echoes[i];
+      e.x += e.vx * dt; e.y += e.vy * dt;
+
+      if (e.x < e.r) { e.x = e.r; e.vx = Math.abs(e.vx); }
+      if (e.x > view.w - e.r) { e.x = view.w - e.r; e.vx = -Math.abs(e.vx); }
+      if (e.y < e.r) { e.y = e.r; e.vy = Math.abs(e.vy); }
+      if (e.y > view.h - e.r) { e.y = view.h - e.r; e.vy = -Math.abs(e.vy); }
+
+      if (now - e.spawnAt > e.lifetime) {
+        state.echoes.splice(i, 1);
+        continue;
+      }
+
+      for (const t of state.players) {
+        if (!t.alive || t === e.owner || t.isBot === e.owner.isBot) continue;
+        if (dist(e.x, e.y, t.x, t.y) >= t.radius + e.r) continue;
+
+        if (t.isBot) {
+          t.alive = false; t.respawnIn = BOT_RESPAWN_MS;
+          const killMult = e.owner.isBot ? 0.4 : getKillGrowthMult();
+          e.owner.radius = Math.min(MAX_RADIUS, e.owner.radius + t.radius * killMult);
+          state.score += KILL_SCORE;
+          state.lifetimeScore += KILL_SCORE;
+          
+          playExplosionSound();
+          state.screenShake = 12;
+          createExplosion(t.x, t.y, BOT_RGB, 30);
+          updateDailyChallengeProgress('kills', 1);
+        } else {
+          if (Date.now() < t.invulnUntil) continue;
+          t.alive = false;
+          createExplosion(t.x, t.y, getSkinRGB(selectedSkin, state.time), 40);
+          killHuman();
+        }
+
+        state.echoes.splice(i, 1);
+        break;
+      }
+    }
+
+    const pRGB = getSkinRGB(selectedSkin, state.time);
+    for (let i = state.orbs.length - 1; i >= 0 && p && p.alive; i--) {
+      const o = state.orbs[i];
+      if (dist(o.x, o.y, p.x, p.y) < o.r + p.radius * 0.95) {
+        state.orbs.splice(i, 1);
+        state.score += ORB_SCORE;
+        state.lifetimeScore += ORB_SCORE;
+        p.radius = Math.min(MAX_RADIUS, p.radius + getOrbGrowthRate());
+        playSonarPing(1100, 0.05);
+        createExplosion(o.x, o.y, pRGB, 6);
+        updateDailyChallengeProgress('orbs', 1);
+      }
+    }
+    while (state.orbs.length < ORB_COUNT) spawnOrb();
+
+    if (p && p.alive) {
+      state.score += dt * 3;
+      state.lifetimeScore += dt * 3;
+      updateDailyChallengeProgress('score', Math.floor(state.score));
+    }
+    checkSkinUnlocks();
+  }
+
+  // ---------- Online multiplayer (WebSocket client) ----------
+  function defaultServerUrl() {
+    if (location.protocol === 'file:') return 'ws://localhost:3000';
+    return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+  }
+
+  function connectOnline() {
+    if (net.ws) return;
+    const url = $('serverInput').value.trim() || defaultServerUrl();
+    $('netStatus').textContent = 'Connecting…';
+    let ws;
+    try { ws = new WebSocket(url); } catch (e) { $('netStatus').textContent = 'That server address is not valid.'; return; }
+    net.ws = ws;
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name: playerName, skin: selectedSkin.id }));
+    ws.onmessage = ev => {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.t === 'welcome') { net.id = m.id; startOnlineGame(); }
+      else if (m.t === 'full') $('netStatus').textContent = 'The server is full. Try again soon.';
+      else if (m.t === 's') onSnapshot(m);
+    };
+    ws.onclose = () => {
+      const wasActive = net.active;
+      net.ws = null;
+      if (wasActive) {
+        leaveOnline();
+        $('startScreen').classList.add('show');
+        $('netStatus').textContent = 'Disconnected from the server.';
+      } else if (!$('netStatus').textContent.startsWith('The server is full')) {
+        $('netStatus').textContent = 'Could not connect. Is the server running?';
+      }
+    };
+  }
+
+  function startOnlineGame() {
+    getAudio();
+    net.active = true; net.map = new Map(); net.lastScore = 0; net.lastAlive = true; net.killer = null;
+    state.players = []; state.echoes = []; state.orbs = []; state.particles = [];
+    state.score = 0; state.screenShake = 0;
+    applyArena();
+    running = true; paused = false;
+    $('startScreen').classList.remove('show');
+    $('deathScreen').classList.remove('show');
+    $('netStatus').textContent = '';
+  }
+
+  function leaveOnline() {
+    net.active = false;
+    const ws = net.ws; net.ws = null;
+    if (ws) { ws.onclose = null; try { ws.close(); } catch (e) {} }
+    state.players = []; state.echoes = []; state.orbs = []; state.particles = [];
+    running = false; paused = true;
+    $('deathScreen').classList.remove('show');
+    $('pauseScreen').classList.remove('show');
+    fitCanvas();
+  }
+
+  function onSnapshot(m) {
+    if (!net.active) return;
+    const seen = new Set();
+    for (const d of m.p) {
+      seen.add(d.id);
+      let o = net.map.get(d.id);
+      if (!o) { o = { id: d.id, x: d.x, y: d.y, vx: 0, vy: 0, angle: 0, pulse: rand(0, TAU) }; net.map.set(d.id, o); }
+      Object.assign(o, {
+        name: d.n, isBot: !!d.b, radius: d.r, alive: !!d.a, score: d.s, tx: d.x, ty: d.y,
+        invulnUntil: Date.now() + d.iu,
+        skinObj: d.id === net.id ? selectedSkin : (SKINS.find(s => s.id === d.k) || SKINS[0])
+      });
+    }
+    for (const id of [...net.map.keys()]) if (!seen.has(id)) net.map.delete(id);
+
+    const me = net.map.get(net.id);
+    state.players = me ? [me, ...[...net.map.values()].filter(p => p !== me)] : [...net.map.values()];
+    state.echoes = m.e.map(e => ({
+      x: e.x, y: e.y, vx: e.vx, vy: e.vy, r: ECHO_RADIUS, owner: net.map.get(e.o) || GHOST,
+      spawnAt: state.time - e.ag, lifetime: e.lt
+    }));
+    state.orbs = m.o.map(o => ({ x: o.x, y: o.y, r: o.r, phase: o.x * 0.05 }));
+
+    handleOnlineEvents(m.ev);
+
+    if (me) {
+      if (net.lastAlive && !me.alive) {
+        net.lastAlive = false;
+        const k = net.killer;
+        killHuman(k ? (k.bot ? 'You were eliminated by a bot.' : `You were eliminated by ${k.name}.`) : null);
+      } else if (!net.lastAlive && me.alive) {
+        net.lastAlive = true; net.lastScore = 0; net.killer = null;
+        $('deathScreen').classList.remove('show');
+      }
+      if (me.score > net.lastScore) state.lifetimeScore += me.score - net.lastScore;
+      net.lastScore = me.score;
+      state.score = me.score;
+      if (me.alive) updateDailyChallengeProgress('score', Math.floor(me.score));
+    }
+  }
+
+  function handleOnlineEvents(list) {
+    for (const e of list || []) {
+      const mine = e.by === net.id;
+      if (e.k === 'shot') {
+        if (mine) playSonarPing(750, 0.12);
+      } else if (e.k === 'orb') {
+        createExplosion(e.x, e.y, getSkinRGB(selectedSkin, state.time), 6);
+        if (mine) { playSonarPing(1100, 0.05); updateDailyChallengeProgress('orbs', 1); }
+      } else if (e.k === 'kill') {
+        const rgb = e.vb ? BOT_RGB : getSkinRGB(SKINS.find(s => s.id === e.vk) || SKINS[0], state.time);
+        createExplosion(e.x, e.y, rgb, 30);
+        if (mine) { playExplosionSound(); state.screenShake = 12; updateDailyChallengeProgress('kills', 1); }
+        if (e.v === net.id) net.killer = { name: e.bn, bot: !!e.bb };
+      }
+    }
+  }
+
+  function updateOnline(dt) {
+    state.time += dt * 1000;
+    updateFx(dt);
+    const f = Math.min(1, 12 * dt);
+    for (const p of state.players) {
+      if (p.tx === undefined) continue;
+      p.x += (p.tx - p.x) * f; p.y += (p.ty - p.y) * f;
+    }
+    for (const e of state.echoes) {
+      e.x += e.vx * dt; e.y += e.vy * dt;
+      if (e.x < e.r) { e.x = e.r; e.vx = Math.abs(e.vx); }
+      if (e.x > view.w - e.r) { e.x = view.w - e.r; e.vx = -Math.abs(e.vx); }
+      if (e.y < e.r) { e.y = e.r; e.vy = Math.abs(e.vy); }
+      if (e.y > view.h - e.r) { e.y = view.h - e.r; e.vy = -Math.abs(e.vy); }
+    }
+  }
+
+  setInterval(() => {
+    if (!net.active || !net.ws || net.ws.readyState !== 1) return;
+    const me = human();
+    const key = k => !!state.keys[k];
+    let kx = (key('d') || key('arrowright') ? 1 : 0) - (key('a') || key('arrowleft') ? 1 : 0);
+    let ky = (key('s') || key('arrowdown') ? 1 : 0) - (key('w') || key('arrowup') ? 1 : 0);
+    let mx = state.mouse.x, my = state.mouse.y;
+    if (paused && me) { kx = 0; ky = 0; mx = me.x; my = me.y; } // menu open: hold still
+    net.ws.send(JSON.stringify({ t: 'in', kx, ky, mx: Math.round(mx), my: Math.round(my) }));
+  }, 33);
+
+  // ---------- Drawing & Rendering ----------
+  function drawGrid() {
+    ctx.save();
+    ctx.globalAlpha = 0.05; ctx.strokeStyle = '#9fbce9'; ctx.lineWidth = 1;
+    for (let x = 0; x < view.w; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, view.h); ctx.stroke(); }
+    for (let y = 0; y < view.h; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(view.w, y); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  function glowDot(x, y, r, rgb, strength) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${rgb},${strength})`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+  }
+
+  function drawEntity(e) {
+    const rgb = e.isBot ? BOT_RGB : getSkinRGB(e.skinObj || selectedSkin, state.time);
+    const protectedNow = Date.now() < e.invulnUntil;
+    const pulse = 1 + Math.sin(state.time / 150 + e.pulse) * 0.08;
+
+    ctx.save();
+    ctx.globalAlpha = protectedNow && Math.floor(state.time / 100) % 2 ? 0.35 : 1;
+    glowDot(e.x, e.y, e.radius * 3.2, rgb, 0.25);
+    
+    ctx.beginPath();
+    ctx.lineWidth = Math.max(2, Math.round(e.radius * 0.18));
+    ctx.strokeStyle = `rgba(${rgb},0.95)`;
+    ctx.arc(e.x, e.y, e.radius * pulse, 0, TAU); ctx.stroke();
+
+    ctx.beginPath();
+    ctx.fillStyle = e.isBot ? 'rgba(80,10,10,0.4)' : 'rgba(5,15,35,0.4)';
+    ctx.arc(e.x, e.y, Math.max(2, e.radius * 0.4), 0, TAU); ctx.fill();
+
+    ctx.beginPath(); ctx.fillStyle = `rgba(${rgb},1)`;
+    ctx.arc(e.x, e.y, Math.max(2, e.radius * 0.1), 0, TAU); ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = '600 11px Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(e.name, e.x, e.y - e.radius - 8);
+    ctx.restore();
+  }
+
+  function draw() {
+    // FIX: clear the whole canvas first, then apply the screen shake, so shaking leaves no streaks
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    ctx.clearRect(0, 0, view.winW, view.winH);
+
+    ctx.save();
+    const sh = state.screenShake > 0 ? state.screenShake : 0;
+    ctx.translate(view.ox + (sh ? (Math.random() - 0.5) * sh : 0), view.oy + (sh ? (Math.random() - 0.5) * sh : 0));
+    ctx.scale(view.s, view.s);
+
+    if (net.active) { // show the edges of the shared arena
+      ctx.fillStyle = 'rgba(8,22,48,0.6)'; ctx.fillRect(0, 0, view.w, view.h);
+      ctx.strokeStyle = 'rgba(110,238,255,0.35)'; ctx.lineWidth = 2; ctx.strokeRect(0, 0, view.w, view.h);
+    }
+    drawGrid();
+
+    const playerSkinRGB = getSkinRGB(selectedSkin, state.time);
+    for (const o of state.orbs) {
+      const y = o.y + Math.sin(o.phase + state.time / 400) * 3;
+      glowDot(o.x, y, o.r * 3.0, playerSkinRGB, 0.25);
+      glowDot(o.x, y, o.r * 1.5, playerSkinRGB, 0.95);
+    }
+
+    for (const q of state.echoes) {
+      const life = clamp(1 - (state.time - q.spawnAt) / q.lifetime, 0, 1);
+      const rgb = q.owner.isBot ? BOT_RGB : getSkinRGB(q.owner.skinObj || selectedSkin, state.time);
+      glowDot(q.x, q.y, q.r * 4.5, rgb, 0.7 * life);
+      ctx.beginPath(); ctx.fillStyle = `rgba(${rgb},${0.35 + 0.65 * life})`;
+      ctx.arc(q.x, q.y, q.r, 0, TAU); ctx.fill();
+    }
+
+    for (const pt of state.particles) {
+      ctx.beginPath(); ctx.fillStyle = `rgba(${pt.rgb},${pt.life})`;
+      ctx.arc(pt.x, pt.y, pt.r, 0, TAU); ctx.fill();
+    }
+
+    for (const e of state.players) if (e.alive) drawEntity(e);
+    ctx.restore();
+  }
+
+  function updateUI() {
+    const p = human();
+    state.best = Math.max(state.best, Math.floor(state.score));
+    $('hudScore').textContent = Math.floor(state.score);
+    $('hudRadius').textContent = p ? Math.floor(p.radius) : PLAYER_RADIUS;
+    $('best').textContent = state.best;
+    $('statSkinName').textContent = selectedSkin.name;
+  }
+
+  // ---------- Animation Loop ----------
+  function loop(now) {
+    requestAnimationFrame(loop);
+    const dt = Math.min(0.05, (now - last) / 1000 || 0);
+    last = now;
+
+    if (net.active) {
+      updateOnline(dt);
+    } else if (running && !paused) {
+      state.time += dt * 1000;
+      update(dt);
+    }
+    draw();
+    updateUI();
+  }
+
+  // ---------- 0:00 UTC Dynamic Daily Task System ----------
+  const DAILY_TASK_POOL = [
+    { id: 'orbs', title: 'Orb Collector', type: 'orbs', baseGoal: 35, desc: 'Collect power orbs in matches.', rewardType: 'radius', rewardName: 'Perk: 2x Starting Radius' },
+    { id: 'kills', title: 'Arena Predator', type: 'kills', baseGoal: 4, desc: 'Destroy enemy entities using echoes.', rewardType: 'shield', rewardName: 'Perk: 12s Shield Immunity' },
+    { id: 'score', title: 'Survival Specialist', type: 'score', baseGoal: 300, desc: 'Reach a high score in a match.', rewardType: 'radius', rewardName: 'Perk: 2x Starting Radius' }
+  ];
+
+  let dailyState = { dateStr: '', progress: 0, completed: false, rewardUsed: false, consecutiveCompletions: 0, bestStreak: 0, lastCompletedDate: '' };
+
+  function getTodayUTCDateString() {
+    const d = new Date();
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  const DAY_MS = 86400000;
+  const dayDiff = (a, b) => (Date.parse(a + 'T00:00:00Z') - Date.parse(b + 'T00:00:00Z')) / DAY_MS;
+
+  // A new day starts fresh progress, but FIX: the completion streak and best streak carry over
+  // (they used to be wiped every midnight, so streak skins could never be earned)
+  function freshDaily(today, prev) {
+    const p = prev || {};
+    const keepsStreak = p.lastCompletedDate && dayDiff(today, p.lastCompletedDate) <= 1;
+    return {
+      dateStr: today, progress: 0, completed: false, rewardUsed: false,
+      consecutiveCompletions: keepsStreak ? (p.consecutiveCompletions || 0) : 0,
+      bestStreak: p.bestStreak || 0, lastCompletedDate: p.lastCompletedDate || ''
+    };
+  }
+
+  function loadDailyState() {
+    const today = getTodayUTCDateString();
+    if (dailyState.dateStr === today) return; // FIX: only reload from storage when the UTC day changes
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem('echoDailyState')); } catch (e) {}
+    if (saved && saved.dateStr === today) {
+      dailyState = Object.assign(freshDaily(today, saved), saved);
+    } else {
+      dailyState = freshDaily(today, saved);
+      saveDailyState();
+    }
+  }
+
+  function saveDailyState() {
+    try { localStorage.setItem('echoDailyState', JSON.stringify(dailyState)); } catch(e){}
+  }
+
+  function getDailyTask() {
+    loadDailyState();
+    let hash = 0;
+    for (let i = 0; i < dailyState.dateStr.length; i++) {
+      hash = (hash << 5) - hash + dailyState.dateStr.charCodeAt(i);
+      hash |= 0;
+    }
+    const baseTask = DAILY_TASK_POOL[Math.abs(hash) % DAILY_TASK_POOL.length];
+    
+    let mult = 1.0;
+    if (botDifficulty === 'easy') mult = 0.7;
+    else if (botDifficulty === 'hard') mult = 1.8;
+
+    const goal = Math.round(baseTask.baseGoal * mult);
+
+    return {
+      ...baseTask,
+      goal,
+      current: dailyState.progress,
+      completed: dailyState.completed,
+      rewardUsed: dailyState.rewardUsed
+    };
+  }
+
+  function renderDailyChallenges() {
+    const task = getDailyTask();
+    const list = $('dailyChallengesList');
+    list.innerHTML = '';
+
+    const pct = Math.min(100, Math.floor((task.current / task.goal) * 100));
+    const card = document.createElement('div');
+    card.className = 'challenge-card';
+    
+    let statusBadge = '';
+    if (task.completed) {
+      statusBadge = task.rewardUsed ? ' <span style="color:#aaa">(Perk Used)</span>' : ' <span style="color:#50ff50">✅ Ready!</span>';
+    }
+
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="challenge-title">${task.title}${statusBadge}</div>
+        <div style="font-size:10px; color:var(--accent);">Resets 00:00 UTC</div>
+      </div>
+      <div class="challenge-desc">${task.desc} Target: <b>${task.goal}</b> (${botDifficulty.toUpperCase()})</div>
+      <div class="challenge-reward">${task.rewardName} ${task.completed && !task.rewardUsed ? '[Active Next Game]' : ''}</div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+      <div style="font-size:10px; color:var(--text-dim); margin-top:2px; text-align:right;">${task.current} / ${task.goal}</div>
+    `;
+    list.appendChild(card);
+  }
+
+  // FIX: only saves and redraws when the progress actually changes (not 60 times a second)
+  // FIX: only saves and redraws when the progress actually changes (not 60 times a second)
+  function updateDailyChallengeProgress(type, amt) {
+    const task = getDailyTask();
+    if (task.type !== type || dailyState.completed) return;
+    if (type === 'score') {
+      if (amt <= dailyState.progress) return;
+      dailyState.progress = amt;
+    } else {
+      dailyState.progress += amt;
+    }
+
+    if (dailyState.progress >= task.goal) {
+      dailyState.progress = task.goal;
+      dailyState.completed = true;
+
+      const today = getTodayUTCDateString();
+      const previousDate = dailyState.lastCompletedDate;
+      if (previousDate && dayDiff(today, previousDate) === 1) {
+        dailyState.consecutiveCompletions = (dailyState.consecutiveCompletions || 0) + 1;
+      } else if (previousDate !== today) {
+        dailyState.consecutiveCompletions = 1;
+      }
+      dailyState.bestStreak = Math.max(dailyState.bestStreak || 0, dailyState.consecutiveCompletions);
+      dailyState.lastCompletedDate = today;
+
+      state.dailyCompletions += 1;
+      try { localStorage.setItem('echoDailyCompletions', state.dailyCompletions); } catch (e) {}
+
+      triggerPerkBanner(`DAILY TASK COMPLETED! ${task.rewardName}`);
+      checkSkinUnlocks();
+    }
+    saveDailyState();
+    renderDailyChallenges();
+  }
+
+  // ---------- Global Leaderboard (daily, resets 00:00 UTC) ----------
+  // Uses the same Firebase database as Fartdle. Add the "echo" rules from the instructions.
+  const DB = 'https://fartdle-default-rtdb.firebaseio.com';
+
+  function boardMessage(text) {
+    const tbody = $('leaderboardBody');
+    tbody.innerHTML = '';
+    const tr = document.createElement('tr'), td = document.createElement('td');
+    td.colSpan = 3; td.textContent = text;
+    tr.appendChild(td); tbody.appendChild(tr);
+  }
+
+  async function renderLeaderboard() {
+    try {
+      const r = await fetch(`${DB}/echo/${getTodayUTCDateString()}.json`);
+      if (r.status === 401 || r.status === 403) { boardMessage('Blocked by Firebase rules.'); return; }
+      const data = await r.json();
+      const rows = Object.values(data || {})
+        .filter(x => typeof x.score === 'number' && typeof x.name === 'string')
+        .sort((a, b) => b.score - a.score).slice(0, 5);
+      if (!rows.length) { boardMessage('No scores yet today.'); return; }
+      const tbody = $('leaderboardBody');
+      tbody.innerHTML = '';
+      rows.forEach((x, i) => {
+        const tr = document.createElement('tr');
+        [i + 1, x.name, x.score].forEach(v => {
+          const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); // textContent keeps names safe
+        });
+        tbody.appendChild(tr);
+      });
+    } catch (e) { boardMessage("Couldn't load the leaderboard."); }
+  }
+
+  async function postScore(score) {
+    if (score < 50) return;
+    try {
+      await fetch(`${DB}/echo/${getTodayUTCDateString()}.json`, {
+        method: 'POST',
+        body: JSON.stringify({ name: playerName.replace(/[^\w .-]/g, '').slice(0, 12) || 'Player', score, ts: Date.now() })
+      });
+    } catch (e) {}
+  }
+
+  // ---------- Skins ----------
+  // FIX: only rebuilds the grid when something actually unlocks (it used to rebuild every frame)
+  function checkSkinUnlocks() {
+    let changed = false;
+    SKINS.forEach(skin => {
+      if (skin.unlocked) return;
+      let ok = false;
+      if (skin.minScore) ok = (skin.minScore > 5001 ? state.lifetimeScore : state.best) >= skin.minScore;
+      if (skin.dailyCompletions && state.dailyCompletions >= skin.dailyCompletions) ok = true;
+      if (skin.streak && (dailyState.bestStreak || 0) >= skin.streak) ok = true;
+      if (ok) { skin.unlocked = true; changed = true; }
+    });
+    if (changed) renderSkins();
+  }
+
+  function renderSkins() {
+    const grid = $('skinsGrid');
+    grid.innerHTML = '';
+    SKINS.forEach(skin => {
+      const card = document.createElement('div');
+      card.className = `skin-card ${skin === selectedSkin ? 'active' : ''} ${!skin.unlocked ? 'locked' : ''}`;
+      
+      const prev = document.createElement('div');
+      prev.className = 'skin-preview';
+      prev.style.background = skin.hex;
+
+      card.appendChild(prev);
+      card.innerHTML += `<div class="skin-name">${skin.name}</div><div class="skin-req">${skin.unlocked ? 'Unlocked' : skin.req}</div>`;
+      
+      card.onclick = () => {
+        if (skin.unlocked) {
+          selectedSkin = skin;
+          try { localStorage.setItem('echoSkin', skin.id); } catch (e) {}
+          if (net.active && net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify({ t: 'skin', k: skin.id }));
+          renderSkins();
+        }
+      };
+      grid.appendChild(card);
+    });
+  }
+
+  // ---------- Tabs Indicator Setup ----------
+  function setupTabs() {
+    const tabs = document.querySelectorAll('.tab-btn');
+    const indicator = $('tabIndicator');
+
+    function updateIndicator(target) {
+      if (!target) return;
+      indicator.style.width = `${target.offsetWidth}px`;
+      indicator.style.left = `${target.offsetLeft}px`;
+    }
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        tab.classList.add('active');
+        $(tab.dataset.tab).classList.add('active');
+        updateIndicator(tab);
+        if (tab.dataset.tab === 'tabLeaderboard') renderLeaderboard();
+      });
+    });
+
+    const activeTab = document.querySelector('.tab-btn.active');
+    setTimeout(() => updateIndicator(activeTab), 50);
+  }
+
+  // ---------- Controls ----------
+  // FIX: one pause toggle used by the button, Esc and P, and it ignores the death screen
+  function togglePause() {
+    if (!running || $('deathScreen').classList.contains('show')) return;
+    paused = !paused;
+    $('pauseScreen').classList.toggle('show', paused);
+    if (paused && net.active) triggerPerkBanner('Online matches keep running while this menu is open');
+  }
+
+  function backToMenu() {
+    if (net.active) leaveOnline();
+    running = false; paused = true;
+    $('deathScreen').classList.remove('show');
+    $('pauseScreen').classList.remove('show');
+    $('startScreen').classList.add('show');
+  }
+
+  $('hudPauseBtn').onclick = togglePause;
+  $('resumeBtn').onclick = togglePause;
+  $('quitBtn').onclick = backToMenu;
+
+  $('modeBots').onclick = () => {
+    $('modeBots').classList.add('active'); $('modeMulti').classList.remove('active');
+    gameMode = 'bots';
+    $('serverRow').style.display = 'none';
+  };
+
+  $('modeMulti').onclick = () => {
+    $('modeMulti').classList.add('active'); $('modeBots').classList.remove('active');
+    gameMode = 'multi';
+    $('serverRow').style.display = 'block';
+  };
+
+  $('startGameBtn').onclick = () => {
+    getAudio();
+    updatePlayerName($('usernameInput').value, 'start');
+    if (gameMode === 'multi') { connectOnline(); return; }
+    $('startScreen').classList.remove('show');
+    initGame();
+  };
+
+  $('respawnBtn').onclick = () => {
+    if (net.active) {
+      if (net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify({ t: 'respawn' }));
+      return; // the death screen closes when the server confirms the respawn
+    }
+    $('deathScreen').classList.remove('show');
+    initGame();
+  };
+
+  $('menuBtn').onclick = backToMenu;
+
+  $('volumeSlider').oninput = e => { soundVolume = parseFloat(e.target.value); };
+  $('diffSelect').onchange = e => { 
+    botDifficulty = e.target.value; 
+    renderDailyChallenges();
+  };
+
+  $('usernameInput').oninput = e => { updatePlayerName(e.target.value, 'start'); };
+  $('settingsNameInput').oninput = e => { updatePlayerName(e.target.value, 'settings'); };
+
+  window.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (e.target.tagName === 'INPUT') { // typing in a name box: never treat it as game controls
+      if (k === 'escape') togglePause();
+      return;
+    }
+    state.keys[k] = true;
+    if (running && ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+    if (k === 'escape' || k === 'p') togglePause();
+  });
+
+  window.addEventListener('keyup', e => { state.keys[e.key.toLowerCase()] = false; });
+  window.addEventListener('blur', () => { state.keys = {}; });
+  window.addEventListener('resize', fitCanvas);
+  window.addEventListener('pagehide', () => { state.best = Math.max(state.best, Math.floor(state.score)); saveProgress(); }); // FIX: keep progress if the tab closes mid-run
+
+  const updateMouse = e => {
+    state.mouse.x = (e.clientX - view.ox) / view.s;
+    state.mouse.y = (e.clientY - view.oy) / view.s;
+  };
+  canvas.addEventListener('pointermove', updateMouse);
+  canvas.addEventListener('pointerdown', updateMouse);
+
+  // ---------- Init ----------
+  fitCanvas();
+  setupTabs();
+  renderDailyChallenges();
+  renderLeaderboard();
+  checkSkinUnlocks(); // FIX: skins you already earned show as unlocked on load
+  try {
+    const saved = SKINS.find(s => s.id === localStorage.getItem('echoSkin') && s.unlocked);
+    if (saved) selectedSkin = saved;
+  } catch (e) {}
+  renderSkins();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
